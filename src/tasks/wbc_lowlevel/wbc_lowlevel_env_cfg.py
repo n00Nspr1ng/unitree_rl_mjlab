@@ -28,6 +28,9 @@ import src.tasks.wbc_lowlevel.mdp as mdp
 def make_wbc_lowlevel_env_cfg() -> ManagerBasedRlEnvCfg:
     """Create base WBC low-level task configuration (flat terrain, no height scan)."""
 
+    # Training now emits obs joint_pos/joint_vel in action order (act_ctl == MJCF/MuJoCo order),
+    # so mjlab's default joint_pos_rel/joint_vel_rel order already matches -- no reorder needed.
+
     ##
     # Observations — ordering must match G1LowLevelEnv.compute_current_observations
     ##
@@ -84,7 +87,7 @@ def make_wbc_lowlevel_env_cfg() -> ManagerBasedRlEnvCfg:
     }
 
     ##
-    # Actions — uniform scale=0.25 matches IsaacSim training (action_scale=0.25)
+    # Actions — robot-specific cfgs override this placeholder scale.
     ##
 
     actions = {
