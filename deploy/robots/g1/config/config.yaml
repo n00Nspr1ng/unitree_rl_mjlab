@@ -8,6 +8,10 @@ FSM:
       id: 3
       type: RLBase
 
+    WbcLowlevel:
+      id: 4
+      type: RLBase
+
     Mimic_Dance1_subject2:
       id: 5
       type: Mimic
@@ -33,9 +37,10 @@ FSM:
 
 
   FixStand:
-    transitions: 
+    transitions:
       Passive: LT + B.on_pressed
       Velocity: RT + A.on_pressed
+      WbcLowlevel: RT + X.on_pressed
 
     kp: [
       100,100,100,150,40,40,
@@ -52,23 +57,32 @@ FSM:
       10,10,10,10,10,10,10,
     ]
     ts: [0, 2]
+    # Ramp target = ISAAC_KEYFRAME (WBC policy default pose) so the FixStand -> WbcLowlevel
+    # handoff starts near the policy's default_joint_pos (no jump on entry).
     qs: [
       [],
-      [ -0.1, 0,0,0.3,-0.2,0,
-        -0.1, 0,0,0.3,-0.2,0,
+      [ -0.20, 0,0, 0.42, -0.23, 0,
+        -0.20, 0,0, 0.42, -0.23, 0,
         0,0,0,
-        0.35, 0.18,0,0.87,0,0,0,
-        0.35,-0.18,0,0.87,0,0,0
+        0.35, 0.18,0, 0.87, 0,0,0,
+        0.35,-0.18,0, 0.87, 0,0,0
       ]
     ]
 
 
   Velocity:
-    transitions: 
+    transitions:
       Passive: LT + B.on_pressed
       Mimic_Dance1_subject2: RB + A.on_pressed
 
     policy_dir: config/policy/velocity
+
+
+  WbcLowlevel:
+    transitions:
+      Passive: LT + B.on_pressed
+
+    policy_dir: config/policy/wbc_lowlevel
 
 
   Mimic_Dance1_subject2:
