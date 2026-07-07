@@ -61,9 +61,14 @@ public:
         episode_length += 1;
         robot->update();
         auto obs = observation_manager->compute();
+        last_obs = obs;  // capture assembled observation for per-step diagnostics
         auto action = alg->act(obs);
         action_manager->process_action(action);
     }
+
+    // Last observation fed to the policy (group name -> assembled vector). Used by
+    // State_RLBase::debug_print to mirror scripts/sim2sim.py diagnostics on hardware.
+    std::unordered_map<std::string, std::vector<float>> last_obs;
 
     float step_dt;
     

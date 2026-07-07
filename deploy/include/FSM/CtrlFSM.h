@@ -87,14 +87,23 @@ private:
         
         // Check if need to change state
         int nextStateMode = 0;
+        int firedCheckIdx = -1;
         for(int i(0); i<currentState->registered_checks.size(); i++)
         {
             if(currentState->registered_checks[i].first())
             {
                 nextStateMode = currentState->registered_checks[i].second;
+                firedCheckIdx = i;
                 break;
             }
         }
+
+        if(nextStateMode != 0 && !currentState->isState(nextStateMode))
+            // Which registered_check tripped the transition. For an RLBase state the order is:
+            //   idx 0.. = joystick/DSL transitions (from deploy config, sorted by target name),
+            //   then isTimeout() -> Passive, then bad_orientation() -> Passive (last).
+            spdlog::warn("FSM: transition triggered by registered_checks[{}] -> stateMode {}",
+                         firedCheckIdx, nextStateMode);
 
         if(nextStateMode != 0 && !currentState->isState(nextStateMode))
         {

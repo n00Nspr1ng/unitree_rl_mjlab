@@ -26,7 +26,17 @@ default_joint_pos: [-0.20, 0.0, 0.0, 0.42, -0.23, 0.0,  -0.20, 0.0, 0.0, 0.42, -
 
 actions:
   JointPositionAction:
-    clip: null
+    # Per-joint clamp on the POSITION TARGET (applied to action*scale+offset, i.e. the q
+    # written to motor_cmd.q()). Bounds = 0.9 * MJCF jnt_range (soft_joint_pos_limit_factor),
+    # block order. In sim, MuJoCo caps torque at effort_limit and can hold a joint jammed
+    # past its stop forever; the real motor cannot -- an out-of-limit target => huge, sustained
+    # position error => saturated current => overload cutoff (fault 0x200, motors go limp).
+    # Clamping the target here keeps q_err (and thus the firmware PD torque) bounded.
+    clip: [[-2.278, 2.592], [-0.471, 2.670], [-2.482, 2.482], [-0.079, 2.592], [-0.785, 0.471], [-0.236, 0.236],
+           [-2.278, 2.592], [-2.670, 0.471], [-2.482, 2.482], [-0.079, 2.592], [-0.785, 0.471], [-0.236, 0.236],
+           [-2.356, 2.356], [-0.468, 0.468], [-0.468, 0.468],
+           [-2.780, 2.403], [-1.429, 2.026], [-2.356, 2.356], [-0.942, 1.885], [-1.775, 1.775], [-1.453, 1.453], [-1.453, 1.453],
+           [-2.780, 2.403], [-2.026, 1.429], [-2.356, 2.356], [-0.942, 1.885], [-1.775, 1.775], [-1.453, 1.453], [-1.453, 1.453]]
     joint_names: [.*]
     joint_ids: null
     # SONIC per-joint action scale = 0.25 * effort / stiffness (must match training G1_ACTION_SCALE).

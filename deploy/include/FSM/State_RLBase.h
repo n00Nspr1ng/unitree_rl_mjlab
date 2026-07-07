@@ -38,6 +38,7 @@ public:
             while (policy_thread_running)
             {
                 env->step();
+                debug_print();  // per-step diagnostics mirroring scripts/sim2sim.py
 
                 // Sleep
                 std::this_thread::sleep_until(sleepTill);
@@ -47,6 +48,7 @@ public:
     }
 
     void run();
+    void debug_print();
     
     void exit()
     {
