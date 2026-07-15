@@ -28,6 +28,50 @@ from mjlab.utils.torch import configure_torch_backends
 from mjlab.viewer import NativeMujocoViewer, ViserPlayViewer
 
 
+# Per-joint clamp on the position TARGET (action*scale + default_joint_pos), matching the
+# hardware deploy and the IsaacLab training env. Bounds = 0.9 * MJCF jnt_range and MUST stay
+# identical to:
+#   - deploy/robots/g1/config/policy/wbc_lowlevel/v0/params/deploy.yaml  (JointPositionAction.clip)
+#   - humanoid_coordination envs/lowlevel/g1_lowlevel_env.py             (ACTION_TARGET_SOFT_LIMITS)
+# The mjlab JointPositionAction has no clip of its own, so without this sim2sim would apply the
+# raw (out-of-limit) target and mispredict the clamped hardware behavior.
+ACTION_TARGET_SOFT_LIMITS: dict[str, tuple[float, float]] = {
+    "left_hip_pitch_joint": (-2.278, 2.592),   "left_hip_roll_joint": (-0.471, 2.670),
+    "left_hip_yaw_joint": (-2.482, 2.482),     "left_knee_joint": (-0.079, 2.592),
+    "left_ankle_pitch_joint": (-0.785, 0.471), "left_ankle_roll_joint": (-0.236, 0.236),
+    "right_hip_pitch_joint": (-2.278, 2.592),  "right_hip_roll_joint": (-2.670, 0.471),
+    "right_hip_yaw_joint": (-2.482, 2.482),    "right_knee_joint": (-0.079, 2.592),
+    "right_ankle_pitch_joint": (-0.785, 0.471),"right_ankle_roll_joint": (-0.236, 0.236),
+    "waist_yaw_joint": (-2.356, 2.356), "waist_roll_joint": (-0.468, 0.468), "waist_pitch_joint": (-0.468, 0.468),
+    "left_shoulder_pitch_joint": (-2.780, 2.403), "left_shoulder_roll_joint": (-1.429, 2.026),
+    "left_shoulder_yaw_joint": (-2.356, 2.356),   "left_elbow_joint": (-0.942, 1.885),
+    "left_wrist_roll_joint": (-1.775, 1.775), "left_wrist_pitch_joint": (-1.453, 1.453), "left_wrist_yaw_joint": (-1.453, 1.453),
+    "right_shoulder_pitch_joint": (-2.780, 2.403), "right_shoulder_roll_joint": (-2.026, 1.429),
+    "right_shoulder_yaw_joint": (-2.356, 2.356),   "right_elbow_joint": (-0.942, 1.885),
+    "right_wrist_roll_joint": (-1.775, 1.775), "right_wrist_pitch_joint": (-1.453, 1.453), "right_wrist_yaw_joint": (-1.453, 1.453),
+}
+
+
+def _install_action_clip(raw_env) -> None:
+    """Clamp the joint-position TARGET to the deploy/training soft limits (see
+    ACTION_TARGET_SOFT_LIMITS). The mjlab JointPositionAction applies the raw target, so we wrap
+    its apply_actions to clamp `_processed_actions` first -- making sim2sim faithful to hardware."""
+    term = raw_env.action_manager.get_term("joint_pos")
+    names = list(term.target_names)
+    missing = [n for n in names if n not in ACTION_TARGET_SOFT_LIMITS]
+    assert not missing, f"ACTION_TARGET_SOFT_LIMITS missing bounds for: {missing}"
+    lo = torch.tensor([ACTION_TARGET_SOFT_LIMITS[n][0] for n in names], device=raw_env.device)
+    hi = torch.tensor([ACTION_TARGET_SOFT_LIMITS[n][1] for n in names], device=raw_env.device)
+    orig_apply = term.apply_actions
+
+    def _clamped_apply() -> None:
+        term._processed_actions = torch.clamp(term._processed_actions, lo, hi)
+        orig_apply()
+
+    term.apply_actions = _clamped_apply
+    print(f"[sim2sim] action target clamp installed on 'joint_pos' ({len(names)} joints)")
+
+
 # Scripted high-level command sequences, mirroring scripts/play_lowlevel_fake.py.
 # Each row is 13-dim: [vx, vy, ang_vel_z, l_ee(x,y,z), r_ee(x,y,z), body_rpy(r,p,y), height].
 # The first 3 drive the "twist" velocity command; the last 10 drive the wb_command obs term.
@@ -68,7 +112,7 @@ PRESET_SEQUENCES: dict[str, list[list[float]]] = {
         [0.0, 0.0, 0.0, 0.20, 0.25, 0.10, 0.20, -0.25, 0.10, 0.0, 0.0, 0.0, 0.55],
     ],
     "sim2sim_test": [
-        [0.0, 0.0, 0.0, 0.20, 0.25, 0.10, 0.20, -0.25, 0.10, 0.0, 0.0, 0.0, 0.75],
+        [0.0, 0.0, 0.0, 0.20, 0.25, 0.10, 0.20, -0.25, 0.10, 0.0, 0.0, 0.0, 0.80],
     ],
 }
 
@@ -321,6 +365,9 @@ def main():
     agent_cfg = load_rl_cfg(chosen_task)
     env = ManagerBasedRlEnv(cfg=env_cfg, device=device)
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
+
+    # Clamp the position target to the same soft joint limits the hardware deploy / training use.
+    _install_action_clip(env.unwrapped)
 
     # Replace the default twist arrows with target torso/eef frames + target velocity.
     _install_command_visualizers(env.unwrapped)
